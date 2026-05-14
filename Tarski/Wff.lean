@@ -130,67 +130,18 @@ theorem wff_var_parseVar_some:
   exists (.var n)
   simp [countPrimes_replicate]
 
-theorem wff_arith_unparse :
-  ∀ l, wff_arith l → ∃ t, l = unparse_term t := by
-  intro l h
-  induction h with
-  | wff_O =>
-      exact ⟨Term.zero, rfl⟩
-
-  | wff_v l hv =>
-      rcases hv with ⟨m, rfl⟩
-      exact ⟨Term.var m, rfl⟩
-
-  | wff_S l h ih =>
-      rcases ih with ⟨t, rfl⟩
-      exact ⟨Term.succ t, rfl⟩
-
-  | wff_paren l h ih =>
-      rcases ih with ⟨t, rfl⟩
-      -- This case only works if `unparse_term` emits redundant parentheses
-      -- for some constructor, which it probably does not.
-      sorry
-
-  | wff_plus lhs rhs hl hr ihl ihr =>
-      rcases ihl with ⟨t₁, rfl⟩
-      rcases ihr with ⟨t₂, rfl⟩
-      exact ⟨Term.add t₁ t₂, rfl⟩
-
-  | wff_mult lhs rhs hl hr ihl ihr =>
-      rcases ihl with ⟨t₁, rfl⟩
-      rcases ihr with ⟨t₂, rfl⟩
-      exact ⟨Term.mul t₁ t₂, rfl⟩
-
-  | wff_exp lhs rhs hl hr ihl ihr =>
-      rcases ihl with ⟨t₁, rfl⟩
-      rcases ihr with ⟨t₂, rfl⟩
-      exact ⟨Term.exp t₁ t₂, rfl⟩
-
-
-theorem unparse_num_wff : forall (n : Num),
-  wff_num (unparse_num n) := by
-  intro n
-  induction n with
-  | zero =>
-    simp
-    apply wff_num.wff_O
-  | var nᵥ =>
-    simp
-    apply wff_num.wff_v
-    exists nᵥ
-  | succ n ih =>
-    simp
-    apply wff_num.wff_S
-    assumption
-
-
 theorem unparse_term_wff : forall (t : Term),
   wff_arith (unparse_term t) := by
   intro t
   induction t <;> simp at *
-  case num n =>
-    apply wff_arith.wff_num
-    exact unparse_num_wff n
+  case var n =>
+    apply wff_arith.wff_v
+    exists n
+  case zero =>
+    apply wff_arith.wff_O
+  case succ n ih =>
+    apply wff_arith.wff_S
+    assumption
   case add n m ih1 ih2 =>
     have h1 : (unparse_term n ++ L.plus :: (unparse_term m ++ [L.r_par]))
             = (unparse_term n ++ L.plus :: unparse_term m) ++ [L.r_par] := by grind
@@ -329,29 +280,39 @@ theorem parseSuccLoop_succ :
     ∀ {fuel t xs r},
       parseTerm.parseSuccLoop fuel t xs = some r →
       parseTerm.parseSuccLoop (fuel + 1) t xs = some r := by
-  intro fuel t xs r h
-  cases xs with
-  | nil =>
-      simpa [parseTerm.parseSuccLoop] using h
-  | cons a xs =>
-      cases a <;> try (simpa [parseTerm.parseSuccLoop] using h)
-      case S =>
-        cases fuel with
-        | zero =>
-            simp [parseTerm.parseSuccLoop] at h
-        | succ fuel =>
-            cases t <;> try (simpa [parseTerm.parseSuccLoop] using h)
-            case num n =>
-              have hLoop : parseTerm.parseSuccLoop fuel (.num (.succ n)) xs = some r := by
-                simpa [parseTerm.parseSuccLoop] using h
-              have hLoop' : parseTerm.parseSuccLoop (fuel + 1) (.num (.succ n)) xs = some r :=
-                parseSuccLoop_succ hLoop
-              simpa [parseTerm.parseSuccLoop] using hLoop'
-termination_by fuel _ _ _ => (fuel, 1)
-decreasing_by
-  subst_vars
-  · apply Prod.Lex.left
-    omega
+  intro fuel
+  induction fuel with
+  | zero =>
+      intro t xs r h
+      cases xs with
+      | nil =>
+          change some (t, []) = some r at h
+          cases h
+          rfl
+      | cons a xs =>
+          cases a <;> simp [parseTerm.parseSuccLoop] at * <;> assumption
+
+  | succ fuel ih =>
+      intro t xs r h
+      cases xs with
+      | nil =>
+          change some (t, []) = some r at h
+          cases h
+          rfl
+      | cons a xs =>
+          cases a <;> try
+            simpa [parseTerm.parseSuccLoop] using h
+
+          case S =>
+            change parseTerm.parseSuccLoop (fuel + 1) (.succ t) xs = some r
+            apply ih
+            change parseTerm.parseSuccLoop fuel (.succ t) xs = some r at h
+            exact h
+-- termination_by fuel _ _ _ => (fuel, 1)
+-- decreasing_by
+--   subst_vars
+--   · apply Prod.Lex.left
+--     omega
 
 theorem parseSucc_succ :
     ∀ {fuel xs r},
@@ -602,8 +563,8 @@ theorem parseTerm_det_diff_fuel
 end parseDeterministic
 
 theorem parseSuccLoop_replicate_S :
-    ∀ (k : Nat) (n₀ : Num), ∃ n fuel,
-      parseTerm.parseSuccLoop fuel (.num n₀) (List.replicate k L.S) = some (.num n, []) := by
+    ∀ (k : Nat) (n₀ : Term), ∃ n fuel,
+      parseTerm.parseSuccLoop fuel n₀ (List.replicate k L.S) = some (n, []) := by
   intro k
   induction k with
   | zero =>
@@ -625,59 +586,59 @@ theorem replicate_S_append_one (k : Nat) :
       simp [List.replicate] at *
       rw [ih]
 
-theorem wff_num_shape :
-    ∀ l, wff_num l →
-      ∃ base k, (((base = [L.O]) ∨ wff_var base) ∧
-        l = base ++ List.replicate k L.S) := by
-  intro l h
-  induction h with
-  | wff_O =>
-      refine ⟨[L.O], 0, ?_⟩
-      simp [wff_var]
-  | wff_v l hv =>
-      refine ⟨l, 0, ?_⟩
-      simp [hv]
-  | wff_S l hl ih =>
-      rcases ih with ⟨base, k, hbase, hk⟩
-      refine ⟨base, k + 1, ?_⟩
-      constructor
-      · exact hbase
-      · rw [hk, replicate_S_append_one]
-        simp [List.append_assoc]
+-- theorem wff_num_shape :
+--     ∀ l, wff_num l →
+--       ∃ base k, (((base = [L.O]) ∨ wff_var base) ∧
+--         l = base ++ List.replicate k L.S) := by
+--   intro l h
+--   induction h with
+--   | wff_O =>
+--       refine ⟨[L.O], 0, ?_⟩
+--       simp [wff_var]
+--   | wff_v l hv =>
+--       refine ⟨l, 0, ?_⟩
+--       simp [hv]
+--   | wff_S l hl ih =>
+--       rcases ih with ⟨base, k, hbase, hk⟩
+--       refine ⟨base, k + 1, ?_⟩
+--       constructor
+--       · exact hbase
+--       · rw [hk, replicate_S_append_one]
+--         simp [List.append_assoc]
 
 
-theorem wff_var_parseNum_some:
-  forall l,
-  wff_num l →
-  exists fuel n, parseTerm fuel l = some (Term.num n, []) := by
-  intro l h
-  rcases wff_num_shape l h with ⟨base, k, hbase, rfl⟩
-  cases hbase with
-  | inl hO =>
-      subst hO
-      rcases parseSuccLoop_replicate_S k Num.zero with ⟨n, fuel, hLoop⟩
-      have hLoop' :
-          parseTerm.parseSuccLoop (fuel + 1) (.num .zero) (List.replicate k L.S) =
-            some (.num n, []) := by
-        exact parseSuccLoop_succ hLoop
-      refine ⟨fuel + 2, n, ?_⟩
-      simp [parseTerm, parseTerm.parseAdd, parseTerm.parseMul, parseTerm.parseExp,
-            parseTerm.parseSucc, parseTerm.parseAtom, parseTerm.parseMulLoop, parseTerm.parseAddLoop, hLoop']
+-- theorem wff_var_parseNum_some:
+--   forall l,
+--   wff_num l →
+--   exists fuel n, parseTerm fuel l = some (Term.num n, []) := by
+--   intro l h
+--   rcases wff_num_shape l h with ⟨base, k, hbase, rfl⟩
+--   cases hbase with
+--   | inl hO =>
+--       subst hO
+--       rcases parseSuccLoop_replicate_S k Num.zero with ⟨n, fuel, hLoop⟩
+--       have hLoop' :
+--           parseTerm.parseSuccLoop (fuel + 1) (.num .zero) (List.replicate k L.S) =
+--             some (.num n, []) := by
+--         exact parseSuccLoop_succ hLoop
+--       refine ⟨fuel + 2, n, ?_⟩
+--       simp [parseTerm, parseTerm.parseAdd, parseTerm.parseMul, parseTerm.parseExp,
+--             parseTerm.parseSucc, parseTerm.parseAtom, parseTerm.parseMulLoop, parseTerm.parseAddLoop, hLoop']
 
-  | inr hv =>
-      rcases hv with ⟨m, rfl⟩
-      rcases parseSuccLoop_replicate_S k (.var m) with ⟨n, fuel, hLoop⟩
-      have hLoop' :
-          parseTerm.parseSuccLoop (fuel + 1) (.num (.var m)) (List.replicate k L.S) =
-            some (.num n, []) := by
-        exact parseSuccLoop_succ hLoop
-      have hcp :
-          countPrimes (List.replicate m L.prime ++ List.replicate k L.S) =
-            (m, List.replicate k L.S) := by
-        simpa using countPrimes_replicate_S m k
-      refine ⟨fuel + 2, n, ?_⟩
-      simp [parseTerm, parseTerm.parseAdd, parseTerm.parseMul, parseTerm.parseExp,
-            parseTerm.parseSucc, parseTerm.parseAtom, parseTerm.parseMulLoop, parseTerm.parseAddLoop, hcp, hLoop']
+--   | inr hv =>
+--       rcases hv with ⟨m, rfl⟩
+--       rcases parseSuccLoop_replicate_S k (.var m) with ⟨n, fuel, hLoop⟩
+--       have hLoop' :
+--           parseTerm.parseSuccLoop (fuel + 1) (.num (.var m)) (List.replicate k L.S) =
+--             some (.num n, []) := by
+--         exact parseSuccLoop_succ hLoop
+--       have hcp :
+--           countPrimes (List.replicate m L.prime ++ List.replicate k L.S) =
+--             (m, List.replicate k L.S) := by
+--         simpa using countPrimes_replicate_S m k
+--       refine ⟨fuel + 2, n, ?_⟩
+--       simp [parseTerm, parseTerm.parseAdd, parseTerm.parseMul, parseTerm.parseExp,
+--             parseTerm.parseSucc, parseTerm.parseAtom, parseTerm.parseMulLoop, parseTerm.parseAddLoop, hcp, hLoop']
 
 theorem parseTerm_append_rpar
     {fuel : Nat} {l : L_formula} {t : Term}
@@ -703,10 +664,10 @@ theorem wff_parseTerm : forall l,
   exists fuel φ, parseTerm fuel l = some (φ, []) := by
   intros l h
   induction h with
-  | wff_num n ih=>
-    have ⟨fuel, m, h⟩:= wff_var_parseNum_some _ ih
-    exists fuel
-    exists Term.num m
+  -- | wff_num n ih=>
+    -- have ⟨fuel, m, h⟩:= wff_var_parseNum_some _ ih
+    -- exists fuel
+    -- exists Term.num m
   | wff_paren l h ih =>
     rcases ih with ⟨fuel, t, hparse⟩
     have hinner : parseTerm fuel (l ++ [L.r_par]) = some (t, [L.r_par]) := by
@@ -741,6 +702,7 @@ theorem wff_parseTerm : forall l,
 
   | wff_mult lhs rhs hl hr ihl ihr  => sorry
   | wff_exp lhs rhs hl hr ihl ihr  => sorry
+  | _ => sorry
 
 theorem wff_parse : forall l,
   wff l →
@@ -751,7 +713,7 @@ theorem parse_sound :
   sorry
 
 theorem unparse_injective :
-  unparse ψ = unparse φ → ψ = φ:= by²
+  unparse ψ = unparse φ → ψ = φ := by
   sorry
 
 
