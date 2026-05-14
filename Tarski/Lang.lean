@@ -70,6 +70,12 @@ def closed (t : Formula) : Prop := fv t = []
 def one_fv_term (t : Term) : Prop := 0 ∈ fv_term t
 def one_fv (t : Formula) : Prop := 0 ∈ fv t
 
+def only_free_var_zero (φ : Formula) : Prop :=
+  ∀ n, n ∈ fv φ → n = 0
+
+def only_free_var_zero_one (φ : Formula) : Prop :=
+  ∀ n, n ∈ fv φ → (n = 0 ∨ n = 1)
+
 theorem substTerm_not_mem_fv :
   ∀ s t, 0 ∉ fv_term t → substTerm s t = t := by
   intro s t h

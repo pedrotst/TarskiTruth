@@ -59,6 +59,7 @@ example (σ : Assignment) : evalFormula σ (.forall_ 0 (.exists_ 1 (.not (.eq (.
 def ExpressesSet
   (φ : Formula)
   (S : Nat → Prop) : Prop :=
+  only_free_var_zero φ ∧
   ∀ n, (evalFormula empty_ctx (subst (term_of_nat n) φ)) ↔ S n
 
 def IsArithmeticSet
@@ -69,6 +70,7 @@ def IsArithmeticSet
 def ExpressesRel2
     (φ : Formula)
     (R : Nat → Nat → Prop) : Prop :=
+  only_free_var_zero_one φ ∧
   ∀ m n,
     evalFormula
     (fun x =>
@@ -242,6 +244,22 @@ def star (S : Nat → Prop) : Nat → Prop := fun n =>
 def negSet (S : Nat → Prop) : Nat → Prop := fun n =>
   ¬ S n
 
+theorem only_free_var_neg:
+  forall φ,
+  only_free_var_zero φ →
+  only_free_var_zero φ.not := by
+  intro φ h
+  induction φ
+  all_goals
+    unfold only_free_var_zero at *
+    intro h1 h2
+    simp [fv] at *
+    apply h
+    try assumption
+  all_goals
+    try rcases h2 with ⟨h2_1, h2_2⟩ <;> assumption
+
+
 theorem negSet_arith S :
   IsArithmeticSet S → IsArithmeticSet (negSet S) := by
   intro h
@@ -249,15 +267,18 @@ theorem negSet_arith S :
   rcases h with ⟨φ, h⟩
   exists (.not φ )
   simp at *
-  intro n
-  specialize h n
+  rcases h with ⟨h1, h⟩
   constructor
-  · intro h1
-    simp [negSet]
-    grind
-  · simp [negSet]
-    intro h1
-    grind
+  · exact only_free_var_neg _ h1
+  · intro n
+    specialize h n
+    constructor
+    · intro h1
+      simp [negSet]
+      grind
+    · simp [negSet]
+      intro h1
+      grind
 
 
 -- The following proofs are still in progress and have been deferred
