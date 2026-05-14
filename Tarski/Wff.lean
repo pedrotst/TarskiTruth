@@ -5,30 +5,95 @@ open Lang
 def wff_var (l : L_formula) : Prop :=
   ∃ n, l = (L.var :: List.replicate n L.prime)
 
-inductive wff_num : L_formula → Prop where
-| wff_O : wff_num [L.O]
-| wff_S : forall l : L_formula, wff_num l → wff_num (l ++ [L.S])
-| wff_v : forall l : L_formula, wff_var l → wff_num l
-
 inductive wff_arith : L_formula → Prop where
-| wff_num : forall n, wff_num n → wff_arith n
-| wff_paren : forall l : L_formula, wff_arith l → wff_arith (L.l_par :: l ++ [L.r_par])
-| wff_plus : forall lhs rhs : L_formula, wff_arith lhs → wff_arith rhs → wff_arith (lhs ++ L.plus :: rhs)
-| wff_mult : forall lhs rhs : L_formula, wff_arith lhs → wff_arith rhs → wff_arith (lhs ++ L.mult :: rhs)
-| wff_exp : forall lhs rhs : L_formula, wff_arith lhs → wff_arith rhs → wff_arith (lhs ++ L.exp :: rhs)
+| wff_O :
+    wff_arith [L.O]
 
-inductive wff: L_formula → Prop where
-| wff_paren : forall l : L_formula, wff l → wff (L.l_par :: l ++ [L.r_par])
-| wff_eq : forall lhs rhs : L_formula, wff_arith lhs → wff_arith rhs → wff (lhs ++ L.eq :: rhs)
-| wff_leq : forall lhs rhs: L_formula, wff_arith lhs → wff_arith rhs → wff (lhs ++ L.leq :: rhs)
-| wff_not : forall l : L_formula, wff l → wff (L.not :: l)
-| wff_and : forall (lhs rhs : L_formula), wff lhs → wff rhs → wff (lhs ++ L.and :: rhs)
-| wff_or  : forall (lhs rhs : L_formula), wff lhs → wff rhs → wff (lhs ++ L.or :: rhs)
-| wff_imp : forall (lhs rhs : L_formula), wff lhs → wff rhs → wff (lhs ++ L.imp :: rhs)
-| wff_all : forall v : L_formula, forall l : L_formula, wff l → wff_var v →
-              wff ([L.all] ++ v ++ l)
-| wff_exi : forall v : L_formula, forall l : L_formula, wff l → wff_var v →
-              wff ([L.exi] ++ v ++ l)
+| wff_v :
+    forall l : L_formula,
+      wff_var l →
+      wff_arith l
+
+| wff_S :
+    forall l : L_formula,
+      wff_arith l →
+      wff_arith (l ++ [L.S])
+
+| wff_paren :
+    forall l : L_formula,
+      wff_arith l →
+      wff_arith (L.l_par :: l ++ [L.r_par])
+
+| wff_plus :
+    forall lhs rhs : L_formula,
+      wff_arith lhs →
+      wff_arith rhs →
+      wff_arith (lhs ++ L.plus :: rhs)
+
+| wff_mult :
+    forall lhs rhs : L_formula,
+      wff_arith lhs →
+      wff_arith rhs →
+      wff_arith (lhs ++ L.mult :: rhs)
+
+| wff_exp :
+    forall lhs rhs : L_formula,
+      wff_arith lhs →
+      wff_arith rhs →
+      wff_arith (lhs ++ L.exp :: rhs)
+
+inductive wff : L_formula → Prop where
+| wff_paren :
+    forall l : L_formula,
+      wff l →
+      wff (L.l_par :: l ++ [L.r_par])
+
+| wff_eq :
+    forall lhs rhs : L_formula,
+      wff_arith lhs →
+      wff_arith rhs →
+      wff (lhs ++ L.eq :: rhs)
+
+| wff_leq :
+    forall lhs rhs : L_formula,
+      wff_arith lhs →
+      wff_arith rhs →
+      wff (lhs ++ L.leq :: rhs)
+
+| wff_not :
+    forall l : L_formula,
+      wff l →
+      wff (L.not :: l)
+
+| wff_and :
+    forall lhs rhs : L_formula,
+      wff lhs →
+      wff rhs →
+      wff (lhs ++ L.and :: rhs)
+
+| wff_or :
+    forall lhs rhs : L_formula,
+      wff lhs →
+      wff rhs →
+      wff (lhs ++ L.or :: rhs)
+
+| wff_imp :
+    forall lhs rhs : L_formula,
+      wff lhs →
+      wff rhs →
+      wff (lhs ++ L.imp :: rhs)
+
+| wff_all :
+    forall v l : L_formula,
+      wff l →
+      wff_var v →
+      wff ([L.all] ++ v ++ l)
+
+| wff_exi :
+    forall v l : L_formula,
+      wff l →
+      wff_var v →
+      wff ([L.exi] ++ v ++ l)
 
 theorem countPrimes_replicate (m: Nat):
   countPrimes (List.replicate m L.prime) = (m, []) := by
@@ -65,18 +130,41 @@ theorem wff_var_parseVar_some:
   exists (.var n)
   simp [countPrimes_replicate]
 
-theorem wff_num_unparse :
-  ∀ l, wff_num l → ∃ n, l = unparse_num n := by
+theorem wff_arith_unparse :
+  ∀ l, wff_arith l → ∃ t, l = unparse_term t := by
   intro l h
   induction h with
   | wff_O =>
-      exact ⟨Num.zero, rfl⟩
+      exact ⟨Term.zero, rfl⟩
+
   | wff_v l hv =>
       rcases hv with ⟨m, rfl⟩
-      exact ⟨Num.var m, rfl⟩
+      exact ⟨Term.var m, rfl⟩
+
   | wff_S l h ih =>
-      rcases ih with ⟨n, rfl⟩
-      exact ⟨Num.succ n, rfl⟩
+      rcases ih with ⟨t, rfl⟩
+      exact ⟨Term.succ t, rfl⟩
+
+  | wff_paren l h ih =>
+      rcases ih with ⟨t, rfl⟩
+      -- This case only works if `unparse_term` emits redundant parentheses
+      -- for some constructor, which it probably does not.
+      sorry
+
+  | wff_plus lhs rhs hl hr ihl ihr =>
+      rcases ihl with ⟨t₁, rfl⟩
+      rcases ihr with ⟨t₂, rfl⟩
+      exact ⟨Term.add t₁ t₂, rfl⟩
+
+  | wff_mult lhs rhs hl hr ihl ihr =>
+      rcases ihl with ⟨t₁, rfl⟩
+      rcases ihr with ⟨t₂, rfl⟩
+      exact ⟨Term.mul t₁ t₂, rfl⟩
+
+  | wff_exp lhs rhs hl hr ihl ihr =>
+      rcases ihl with ⟨t₁, rfl⟩
+      rcases ihr with ⟨t₂, rfl⟩
+      exact ⟨Term.exp t₁ t₂, rfl⟩
 
 
 theorem unparse_num_wff : forall (n : Num),

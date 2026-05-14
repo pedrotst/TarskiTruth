@@ -25,12 +25,11 @@ def M : ArithmeticStructure where
   exp := Nat.pow
   le := (· ≤ ·)
 
-
 @[simp]
 def evalTerm (σ : Assignment) : Term → Nat
   | .var v => σ v
-  | .zero    => M.zero
-  | .succ t  => M.succ (evalTerm σ t)
+  | .zero => M.zero
+  | .succ n => M.succ (evalTerm σ n)
   | .add t s => M.add (evalTerm σ t) (evalTerm σ s)
   | .mul t s => M.mul (evalTerm σ t) (evalTerm σ s)
   | .exp t s => M.exp (evalTerm σ t) (evalTerm σ s)
@@ -53,20 +52,14 @@ example (σ : Assignment) : evalFormula σ reflLe := by
 example (σ : Assignment) : evalFormula σ (.forall_ 0 (.exists_ 1 (.not (.eq (.var 0) (.var 1))))) := by
   intros n
   exists (n + 1)
-  simp [update]
-
-
-
-
-
-
+  simp []
 
 
 @[simp]
 def ExpressesSet
   (φ : Formula)
   (S : Nat → Prop) : Prop :=
-  ∀ n, (evalFormula empty_ctx (subst φ (term_of_nat n))) ↔ S n
+  ∀ n, (evalFormula empty_ctx (subst (term_of_nat n) φ)) ↔ S n
 
 def IsArithmeticSet
     (S : Nat → Prop) : Prop :=
@@ -89,10 +82,10 @@ def IsArithmeticRel2
   ∃ φ, ExpressesRel2 φ R
 
 example :
-  ExpressesRel2 ltFormula less_then := by
+  ExpressesRel2 ltFormula (· < ·) := by
   unfold ExpressesRel2
   intros m n
-  constructor <;> simp
+  constructor <;> simp <;> grind
 
 #eval decode 0 0
 
@@ -103,7 +96,7 @@ example :
   intros h1 h2
   rw [h1, h2]
   simp
-  grind
+  constructor <;> grind
 
 #eval parseFormula 1 [L.S]
 
@@ -117,59 +110,114 @@ forall n,
   | succ n =>
     simp
 
-@[simp]
-theorem parseExp0_none:
-forall n,
-  parseTerm.parseExp n [L.S] = none := by
-  intro n
-  cases n with
-  | zero => simp
-  | succ n =>
-  simp
-
-theorem parseBase0_none:
-forall n,
-  parseFormula.parseBase n [L.S] = none := by
-  intro n
-  cases n with
-  | zero => simp
-  | succ n =>
-  simp
-
-theorem decode0_none :
-  forall n, decode n 0 = none := by
-  intro n
-  cases n with
-  | zero => simp
-  | succ n =>
-    simp [parseBase0_none]
-
-theorem nat_term_zero n:
+theorem term_of_nat_sound n:
   forall σ, evalTerm σ (term_of_nat n) = n := by
+  intros
+  induction n <;> simp [term_of_nat]
+  assumption
+
+
+theorem evalTerm_subst_update :
+  forall t σ n,
+    evalTerm σ (substTerm (term_of_nat n) t)
+      = evalTerm (update σ 0 n) t := by
+  intro t
+  induction t with
+  | var n =>
+    by_cases h : n = 0
+    · simp [h, term_of_nat_sound]
+    · simp [h]
+  | zero => simp []
+  | succ n ih => simp [ih]
+  | exp m n ih1 ih2 => simp [ih1, ih2]
+  | mul m n ih1 ih2 => simp [ih1, ih2]
+  | add m n ih1 ih2 => simp [ih1, ih2]
+
+theorem closed_term_of_nat :
+  forall n, closed_term (term_of_nat n) := by
+  intro n
   induction n with
-  | zero =>
-    intro σ
-    simp
+  | zero => simp [closed_term, term_of_nat, fv_term]
   | succ n ih =>
-    intro σ
-    simp [ih]
+    simp [closed_term, term_of_nat, fv_term] at *
+    assumption
+
+
+theorem evalFormula_subst_update :
+  forall φ σ n,
+  evalFormula σ (subst (term_of_nat n) φ)
+            = evalFormula (update σ 0 n) φ := by
+  intro φ
+  induction φ with
+  | eq p q =>
+    intro σ n
+    simp
+    repeat rw [evalTerm_subst_update]
+  | le p q =>
+    intro σ n
+    simp
+    repeat rw [evalTerm_subst_update]
+  | and p q ih1 ih2 =>
+    simp
+    grind
+  | or p q ih1 ih2 =>
+    simp
+    grind
+  | not p ih =>
+    simp
+    grind
+  | imp p q ih1 ih2 =>
+    simp
+    grind
+  | forall_ x p ih =>
+    intros σ n
+    have h : closed_term (term_of_nat n) := closed_term_of_nat n
+    simp
+    by_cases hx : x = 0
+    · simp [hx]
+    · simp [hx]
+      constructor
+      · intro h1 n1
+        specialize ih (update σ x n1) n
+        specialize h1 n1
+        rw [ih] at h1
+        simp [env_comm hx] at h1
+        assumption
+      · intro h1 n1
+        specialize ih (update σ x n1) n
+        rw [ih]
+        rw [env_comm hx]
+        apply h1
+  | exists_ x p ih =>
+    intros σ n
+    have h : closed_term (term_of_nat n) := closed_term_of_nat n
+    simp
+    by_cases hx : x = 0
+    · simp [hx]
+    · simp [hx]
+      constructor
+      · intro h1
+        rcases h1 with ⟨n1, h1⟩
+        exists n1
+        specialize ih (update σ x n1) n
+        rw [ih] at h1
+        simp [env_comm hx] at h1
+        assumption
+      · intro h1
+        rcases h1 with ⟨n1, h1⟩
+        exists n1
+        specialize ih (update σ x n1) n
+        rw [ih]
+        rw [env_comm hx]
+        assumption
 
 theorem diagonal_soundness :
 forall φₙ n σ,
-  evalFormula (update σ 0 n) φₙ
+  evalFormula σ (subst (term_of_nat n) φₙ)
     = evalFormula σ (.forall_ 0 (.imp (.eq (.var 0) (term_of_nat n)) φₙ)) := by
-  intros p n σ
-  simp
-  constructor
-  · intros h1 m h2
-    simp at *
-    rw [nat_term_zero] at h2
-    rw [h2] at *
-    assumption
-  · intros h
-    specialize h n
-    apply h
-    rw [nat_term_zero]
+  intro φₙ n σ
+  rw [evalFormula_subst_update φₙ σ n]
+  simp [term_of_nat_sound]
 
 -- The following proof is still in progress and has been deferred
 -- to keep the file syntactically valid.

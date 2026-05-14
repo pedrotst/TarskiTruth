@@ -1,13 +1,9 @@
 namespace Lang
 
-inductive Num where
-  | var : Nat → Num
-  | zero : Num
-  | succ : Num → Num
-deriving Repr
-
 inductive Term where
-  | num : Num → Term
+  | var : Nat → Term
+  | zero : Term
+  | succ : Term → Term
   | add : Term → Term → Term
   | mul : Term → Term → Term
   | exp : Term → Term → Term
@@ -24,35 +20,141 @@ inductive Formula where
   | exists_ : Nat → Formula → Formula
 deriving Repr
 
-@[simp]
-def num_of_nat : Nat → Num
+def term_of_nat : Nat → Term
 | .zero => .zero
-| .succ n => .succ (num_of_nat n)
+| .succ n => .succ (term_of_nat n)
 
 @[simp]
-def term_of_nat : Nat → Term := .num ∘ num_of_nat
-
-@[simp]
-def substTerm : Term → Term → Term := fun t t' =>
+def substTerm : Term → Term → Term := fun t' t =>
   match t with
-  | .num n =>
-    match n with
-    | .var nᵥ => if nᵥ = 0 then t' else t
-    | _ => t
-  | _ => t
+  | .var nᵥ => if nᵥ = 0 then t' else t
+  | .zero => .zero
+  | .succ n' => .succ (substTerm t' n')
+  | .add t1 t2 => .add (substTerm t' t1) (substTerm t' t2)
+  | .mul t1 t2 => .mul (substTerm t' t1) (substTerm t' t2)
+  | .exp t1 t2 => .exp (substTerm t' t1) (substTerm t' t2)
 
 @[simp]
-def subst : Formula → Term → Formula := fun ψ t =>
+def subst : Term → Formula → Formula := fun t ψ =>
   match ψ with
-  | .eq t1 t2 => .eq (substTerm t1 t) (substTerm t2 t)
-  | .le t1 t2 => .le (substTerm t1 t) (substTerm t2 t)
-  | .and t1 t2 => .and (subst t1 t) (subst t2 t)
-  | .or t1 t2 => .or (subst t1 t) (subst t2 t)
-  | .imp t1 t2 => .imp (subst t1 t) (subst t2 t)
-  | .not t1 => .not (subst t1 t)
-  | .forall_ n p => if n = 0 then ψ else .forall_ n (subst p t)
-  | .exists_ n p => if n = 0 then ψ else .exists_ n (subst p t)
+  | .eq t1 t2 => .eq (substTerm t t1) (substTerm t t2)
+  | .le t1 t2 => .le (substTerm t t1) (substTerm t t2)
+  | .and p q => .and (subst t p) (subst t q)
+  | .or p q => .or (subst t p) (subst t q)
+  | .imp p q => .imp (subst t p) (subst t q)
+  | .not p => .not (subst t p)
+  | .forall_ n p => if n = 0 then ψ else .forall_ n (subst t p)
+  | .exists_ n p => if n = 0 then ψ else .exists_ n (subst t p)
 
+def fv_term : Term → List Nat
+  | .var v => [v]
+  | .zero => []
+  | .succ n => fv_term n
+  | .exp n m => (fv_term n) ++ fv_term m
+  | .mul n m => fv_term n ++ fv_term m
+  | .add n m => fv_term n ++ fv_term m
+
+def fv : Formula → List Nat
+  | .eq t1 t2 => fv_term t1 ++ fv_term t2
+  | .le t1 t2 => fv_term t1 ++ fv_term t2
+  | .and t1 t2 => fv t1 ++ fv t2
+  | .or t1 t2 => fv t1 ++ fv t2
+  | .imp t1 t2 => fv t1 ++ fv t2
+  | .not t => fv t
+  | .forall_ n p => (fv p).filter (fun x => x ≠ n)
+  | .exists_ n p => (fv p).filter (fun x => x ≠ n)
+
+def closed_term (t : Term) : Prop := fv_term t = []
+def closed (t : Formula) : Prop := fv t = []
+
+def one_fv_term (t : Term) : Prop := 0 ∈ fv_term t
+def one_fv (t : Formula) : Prop := 0 ∈ fv t
+
+theorem substTerm_not_mem_fv :
+  ∀ s t, 0 ∉ fv_term t → substTerm s t = t := by
+  intro s t h
+  induction t with
+  | var v =>
+      simp [fv_term, substTerm] at h ⊢
+      by_cases hv : v = 0
+      · subst v
+        contradiction
+      · simp [hv]
+  | zero =>
+      simp [substTerm]
+  | succ n ih =>
+      simp [substTerm, ih h]
+  | add t₁ t₂ ih₁ ih₂ =>
+      simp [fv_term] at h
+      simp [substTerm, ih₁ h.1, ih₂ h.2]
+  | mul t₁ t₂ ih₁ ih₂ =>
+      simp [fv_term] at h
+      simp [substTerm, ih₁ h.1, ih₂ h.2]
+  | exp t₁ t₂ ih₁ ih₂ =>
+      simp [fv_term] at h
+      simp [substTerm, ih₁ h.1, ih₂ h.2]
+
+theorem subst_not_mem_fv :
+  ∀ p t, 0 ∉ fv p → subst t p = p := by
+  intro p t h
+  induction p with
+  | eq t₁ t₂ =>
+      simp [fv] at *
+      constructor
+      · exact substTerm_not_mem_fv t t₁ h.1
+      · exact substTerm_not_mem_fv t t₂ h.2
+
+
+  | le t₁ t₂ =>
+      simp [fv] at *
+      constructor
+      · exact substTerm_not_mem_fv t t₁ h.1
+      · exact substTerm_not_mem_fv t t₂ h.2
+
+  | and p q ihp ihq =>
+      simp [fv] at h
+      simp [subst, ihp h.1, ihq h.2]
+
+  | or p q ihp ihq =>
+      simp [fv] at h
+      simp [subst, ihp h.1, ihq h.2]
+
+  | imp p q ihp ihq =>
+      simp [fv] at h
+      simp [subst, ihp h.1, ihq h.2]
+
+  | not p ih =>
+      simp [fv] at h
+      simp [subst, ih h]
+
+  | forall_ n p ih =>
+      by_cases hn : n = 0
+      · simp [subst, hn]
+      · simp [subst, hn]
+        apply ih
+        intro h0
+        apply h
+        simp [fv, h0]
+        exact fun h0n => hn h0n.symm
+
+  | exists_ n p ih =>
+      by_cases hn : n = 0
+      · simp [subst, hn]
+      · simp [subst, hn]
+        apply ih
+        intro h0
+        apply h
+        simp [fv, h0]
+        exact fun h0n => hn h0n.symm
+
+theorem closed_subst :
+  forall t p, closed p → subst t p = p := by
+  intro t p hp
+  apply subst_not_mem_fv
+  intro h0
+  unfold closed at hp
+  rw [hp] at h0
+  cases h0
 
 inductive L where
 | O
@@ -102,7 +204,7 @@ abbrev L_formula := List L
 -- Examples
 @[simp]
 def reflLe : Formula :=
-  .forall_ 0 (.le (.num $ .var 0) (.num $ .var 0))
+  .forall_ 0 (.le (.var 0) (.var 0))
 
 @[simp]
 def less_then : Nat → Nat → Prop := fun m n => m ≤ n ∧ ¬ (m = n)
@@ -110,20 +212,16 @@ def less_then : Nat → Nat → Prop := fun m n => m ≤ n ∧ ¬ (m = n)
 @[simp]
 def ltFormula : Formula :=
   Formula.and
-    (Formula.le (Term.num $ .var 0) (.num $ .var 1))
-    (Formula.not (Formula.eq (.num $ .var 0) (.num $ .var 1)))-- Example
+    (.le (.var 0) (.var 1))
+    (.not (Formula.eq (.var 0) (.var 1)))-- Example
 
 #eval List.replicate 1 L.prime
 
 @[simp]
-def unparse_num : Num → L_formula
-  | .var n => L.var :: List.replicate n L.prime
-  | .zero => [L.O]
-  | .succ t => unparse_num t ++ [L.S]
-
-@[simp]
 def unparse_term : Term → L_formula
-| .num n => unparse_num n
+| .var n => L.var :: List.replicate n L.prime
+| .zero => [L.O]
+| .succ t => unparse_term t ++ [L.S]
 | .add m n => [L.l_par] ++ unparse_term m ++ [L.plus] ++ unparse_term n ++ [L.r_par]
 | .mul m n => [L.l_par] ++ unparse_term m ++ [L.mult] ++ unparse_term n ++ [L.r_par]
 | .exp m n => [L.l_par] ++ unparse_term m ++ [L.exp] ++ unparse_term n ++ [L.r_par]
@@ -151,83 +249,80 @@ def countPrimes : L_formula → Nat × L_formula
 | xs => (0, xs)
 
 @[simp]
-def parseVar : L_formula → Option (Num × L_formula)
-| L.var :: xs =>
-    let (n, rest) := countPrimes xs
-    some (.var n, rest)
-| _ => none
+def parseVar : L_formula → Option (Term × L_formula)
+  | L.var :: xs =>
+      let (n, rest) := countPrimes xs
+      some (.var n, rest)
+  | _ => none
 
-
-def parseTerm (fuel: Nat) (xs : L_formula) : Option (Term × L_formula) :=
+def parseTerm (fuel : Nat) (xs : L_formula) : Option (Term × L_formula) :=
   parseAdd fuel xs
 where
   parseAtom : Nat → L_formula → Option (Term × L_formula)
-  | 0, _ => none
-  | _, L.O :: xs =>
-      some (.num .zero, xs)
-  | fuel + 1, L.l_par :: xs => do
-      let (t, rest) <- parseAdd fuel xs
-      match rest with
-      | L.r_par :: ys => some (t, ys)
-      | _ => none
-  | _, xs => do
-      let (n, rest) ← parseVar xs
-      some (.num n, rest)
+    | 0, _ => none
+    | _, L.O :: xs =>
+        some (.zero, xs)
+    | fuel + 1, L.l_par :: xs => do
+        let (t, rest) ← parseAdd fuel xs
+        match rest with
+        | L.r_par :: ys => some (t, ys)
+        | _ => none
+    | _, xs => do
+        parseVar xs
 
   parseSucc : Nat → L_formula → Option (Term × L_formula)
-  | fuel, xs => do
-      let (t, rest) <- parseAtom fuel xs
-      parseSuccLoop fuel t rest
+    | fuel, xs => do
+        let (t, rest) ← parseAtom fuel xs
+        parseSuccLoop fuel t rest
 
-  parseSuccLoop (fuel : Nat) (t : Term) : L_formula → Option (Term × L_formula)
-    | L.S :: ys =>
-        match fuel with
-        | 0 => none
-        | fuel + 1 =>
-          match t with
-          | .num n => parseSuccLoop fuel (.num $ .succ n) ys
-          | _ => some (t, L.S :: ys)
-    | ys => some (t, ys)
+  parseSuccLoop : Nat → Term → L_formula → Option (Term × L_formula)
+    | 0, _, L.S :: _ => none
+    | 0, acc, ys => some (acc, ys)
+    | fuel + 1, acc, L.S :: ys =>
+        parseSuccLoop fuel (.succ acc) ys
+    | _, acc, ys =>
+        some (acc, ys)
 
   parseExp : Nat → L_formula → Option (Term × L_formula)
-  | 0, _ => none
-  | fuel + 1, xs => do
-      let (lhs, rest) <- parseSucc fuel xs
-      match rest with
-      | L.exp :: ys => do
-          let (rhs, zs) <- parseExp fuel ys
-          some (.exp lhs rhs, zs)
-      | _ =>
-          some (lhs, rest)
+    | 0, _ => none
+    | fuel + 1, xs => do
+        let (lhs, rest) ← parseSucc fuel xs
+        match rest with
+        | L.exp :: ys => do
+            let (rhs, zs) ← parseExp fuel ys
+            some (.exp lhs rhs, zs)
+        | _ =>
+            some (lhs, rest)
 
   parseMul : Nat → L_formula → Option (Term × L_formula)
     | 0, _ => none
     | fuel, xs => do
-        let (lhs, rest) <- parseExp fuel xs
+        let (lhs, rest) ← parseExp fuel xs
         parseMulLoop fuel lhs rest
 
   parseMulLoop : Nat → Term → L_formula → Option (Term × L_formula)
     | 0, _, L.mult :: _ => none
     | 0, acc, ys => some (acc, ys)
-    | fuel+1, acc, L.mult :: ys => do
-      let (rhs, zs) <- parseExp fuel ys
-      parseMulLoop fuel (.mul acc rhs) zs
-    | _, acc, ys => some (acc, ys)
+    | fuel + 1, acc, L.mult :: ys => do
+        let (rhs, zs) ← parseExp fuel ys
+        parseMulLoop fuel (.mul acc rhs) zs
+    | _, acc, ys =>
+        some (acc, ys)
 
   parseAdd : Nat → L_formula → Option (Term × L_formula)
-  | 0, _ => none
-  | fuel, xs => do
-      let (lhs, rest) <- parseMul fuel xs
-      parseAddLoop fuel lhs rest
+    | 0, _ => none
+    | fuel, xs => do
+        let (lhs, rest) ← parseMul fuel xs
+        parseAddLoop fuel lhs rest
 
   parseAddLoop : Nat → Term → L_formula → Option (Term × L_formula)
     | 0, _, L.plus :: _ => none
     | 0, acc, ys => some (acc, ys)
-    | fuel+1, acc, L.plus :: ys => do
-      let (rhs, zs) <- parseMul fuel ys
-      parseAddLoop fuel (.add acc rhs) zs
-    | _, acc, ys  => some (acc, ys)
-
+    | fuel + 1, acc, L.plus :: ys => do
+        let (rhs, zs) ← parseMul fuel ys
+        parseAddLoop fuel (.add acc rhs) zs
+    | _, acc, ys =>
+        some (acc, ys)
 
 #eval parseTerm 2 [L.var, L.plus, L.var]
 #eval parseTerm 3 [L.l_par, L.var, L.plus, L.var, L.r_par]
@@ -329,13 +424,13 @@ def parse (fuel : Nat) (xs : L_formula) : Option Formula := do
 #eval parse 10 (unparse reflLe)
 #eval parse 10 (unparse ltFormula)
 
-#eval parse 10 (unparse (.imp (.eq (.num $ .var 0) (.num $ .var 1)) (.eq (.num $ .var 1) (.num $ .var 0))))
+#eval parse 10 (unparse (.imp (.eq (.var 0) (.var 1)) (.eq (.var 1) (.var 0))))
 
-#eval parseTerm 10 (unparse_term (.num $ .var 2))
-#eval parseTerm 10 (unparse_term (.num $ .succ (.var 1)))
-#eval parseTerm 10 (unparse_term (.add (.num $ .var 0) (.num $ .var 1)))
-#eval parseTerm 10 (unparse_term (.mul (.num $ .succ (.var 0)) (.num $ .var 2)))
-#eval parseTerm 10 (unparse_term (.exp (.num $ .var 0) (.add (.num $ .var 1) (.num $ .var 2)))) -- may not round-trip as intended
+#eval parseTerm 10 (unparse_term (.var 2))
+#eval parseTerm 10 (unparse_term (.succ (.var 1)))
+#eval parseTerm 10 (unparse_term (.add (.var 0) (.var 1)))
+#eval parseTerm 10 (unparse_term (.mul (.succ (.var 0)) (.var 2)))
+#eval parseTerm 10 (unparse_term (.exp (.var 0) (.add (.var 1) (.var 2)))) -- may not round-trip as intended
 
 
 

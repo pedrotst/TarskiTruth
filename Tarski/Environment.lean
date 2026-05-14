@@ -26,6 +26,25 @@ theorem env_shadow :
   | inr h =>
     repeat rw [env_neq h]
 
+theorem env_comm :
+  x ≠ y →
+  update (update σ x v1) y v2 = update (update σ y v2) x v1 := by
+  intro h
+  funext n
+  by_cases x_eq_n : n = x
+  · by_cases y_eq_n : n = y
+    · subst x_eq_n
+      contradiction
+    · subst x_eq_n
+      simp
+      intro
+      contradiction
+  · by_cases y_eq_n : n = y
+    · subst y_eq_n
+      simp
+      intro
+      contradiction
+    · simp [y_eq_n]
 -- theorem env_same :
 --   update σ x (σ y) = update σ x y := by
 --   funext z
