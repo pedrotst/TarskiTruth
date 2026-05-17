@@ -86,6 +86,9 @@ def IsArithmeticRel2
 example :
   ExpressesRel2 ltFormula (· < ·) := by
   unfold ExpressesRel2
+  constructor
+  · unfold ltFormula
+    simp [only_free_var_zero_one, fv, fv_term]
   intros m n
   constructor <;> simp <;> grind
 
@@ -235,11 +238,12 @@ theorem diagonalR_arith:
   · sorry
 
 def T (n: Nat) : Prop :=
-  exists fuel φ, decode fuel n = some φ →
+  exists fuel φ, decode fuel n = some φ ∧
+  closed φ ∧
   evalFormula empty_ctx φ
 
 def star (S : Nat → Prop) : Nat → Prop := fun n =>
-  exists m, diagonalR n m → S m
+  exists m, diagonalR n m ∧ S m
 
 def negSet (S : Nat → Prop) : Nat → Prop := fun n =>
   ¬ S n
@@ -299,9 +303,9 @@ theorem star_arithmetic :
   specialize h2 n 0
   sorry
 
-theorem encode_decode_idem :
-  (exists fuel, decode fuel ⌜ψ⌝ = some p) →
-    p = ψ := by
+theorem encode_decode_unique :
+  (exists fuel, decode fuel ⌜φ⌝ = some ψ) →
+    ψ = φ := by
     sorry
 
 theorem ex p (P : Nat → Prop):
@@ -314,37 +318,178 @@ theorem ex1 :
 = (forall m, exists φ fuel, decode fuel ⌜m⌝ = some φ → ¬ T ⌜(.forall_ 0 (.imp (.eq (.var 0) (.var m)) φ))⌝) :=
 by sorry
 
-theorem tarski:
-  ¬ IsArithmeticSet T := by
+theorem no_self_negation (P : Prop) :
+    ¬ (P ↔ ¬ P) := by
   intro h
-  have h1 := negSet_arith _ h
-  have h2 := star_arithmetic h1
-  have h3 := h1
-  unfold IsArithmeticSet at h2
-  rcases h2 with ⟨ψ, h2⟩
-  unfold ExpressesSet at h2
-  specialize (h2 (encode ψ))
-  unfold star at h2
-  unfold negSet at *
-  have contr : evalFormula empty_ctx (subst ψ (term_of_nat ⌜ψ⌝))
-              ↔ ¬ evalFormula empty_ctx (subst ψ (term_of_nat ⌜ψ⌝)) := by
+  have hnP : ¬ P := by
+    intro hp
+    exact h.mp hp hp
+  exact hnP (h.mpr hnP)
+
+-- theorem tarski:
+--   ¬ IsArithmeticSet T := by
+--   intro h
+--   have h1 := negSet_arith _ h
+--   have h2 := star_arithmetic h1
+--   have h3 := h1
+--   unfold IsArithmeticSet at h2
+--   rcases h2 with ⟨ψ, h2⟩
+--   unfold ExpressesSet at h2
+--   rcases h2 with ⟨h4, h2⟩
+--   let g := ⌜ ψ ⌝
+--   specialize (h2 g)
+--   unfold star at h2
+--   unfold negSet at *
+--   unfold diagonalR at h2
+--   unfold diagonal at h2
+--   unfold diagonal_formula at h2
+--   have contr : evalFormula empty_ctx (subst (term_of_nat g) ψ)
+--               ↔ ¬ evalFormula empty_ctx (subst (term_of_nat g) ψ) := by
+--     calc
+--       evalFormula empty_ctx (subst (term_of_nat ⌜ψ⌝) ψ)
+--         ↔ ∃ m, diagonalR ⌜ψ⌝ m → ¬ T m := h2
+--       _ ↔ diagonalR ⌜ψ⌝ 0 → ¬ T 0 := by sorry
+--       _ ↔ ¬ evalFormula empty_ctx (subst (term_of_nat ⌜ψ⌝) ψ) := by sorry
+--   grind
+theorem diagonalR_encode :
+  ∀ ψ, diagonalR (encode ψ) (encode (diagSentence ψ)) := by
+  sorry
+
+theorem diagonalR_functional :
+  diagonalR n m₁ →
+  diagonalR n m₂ →
+  m₁ = m₂ := by
+  sorry
+
+theorem T_encode_closed :
+  closed φ →
+  (T (encode φ) ↔ evalFormula empty_ctx φ) := by
+  sorry
+
+theorem diagSentence_closed :
+  ExpressesSet ψ S →
+  closed (diagSentence ψ) := by
+  intro h
+  unfold ExpressesSet at h
+  rcases h with ⟨h1, h⟩
+  unfold diagSentence
+  unfold diagAt
+  unfold closed
+  have h2 := closed_term_of_nat
+  -- specialize h2 ⌜ψ⌝
+  unfold closed_term at h2
+  simp [-encode, fv]
+  constructor
+  · intros a h
+    simp [fv_term] at h
+    assumption
+  · constructor
+    · intros a h3
+      specialize h2 ⌜ψ⌝
+      exfalso
+      grind
+    · unfold only_free_var_zero at h1
+      assumption
+
+theorem tarski :
+  ¬ IsArithmeticSet T := by
+  intro hT
+
+  -- Since T is arithmetic, its complement is arithmetic.
+  have hnegT : IsArithmeticSet (negSet T) := by
+    exact negSet_arith T hT
+
+  -- Since ¬T is arithmetic, its diagonal/star preimage is arithmetic.
+  have hstarNegT : IsArithmeticSet (star (negSet T)) := by
+    exact star_arithmetic hnegT
+
+  -- Choose ψ expressing star (negSet T).
+  rcases hstarNegT with ⟨ψ, hψ⟩
+
+  let g : Nat := encode ψ
+  let δ : Formula := diagSentence ψ
+  let P : Prop := evalFormula empty_ctx (subst (term_of_nat g) ψ)
+
+  -- ψ(g) expresses: g ∈ star (negSet T).
+  have hψg :
+      P ↔ star (negSet T) g := by
+    dsimp [P, g]
+    exact hψ.2 g
+
+  -- The diagonal relation sends g to the code of δ.
+  have hdiagR :
+      diagonalR g (encode δ) := by
+    dsimp [g, δ, diagSentence]
+    exact diagonalR_encode ψ
+    -- HOLE:
+    -- theorem diagonalR_encode :
+    --   ∀ ψ, diagonalR (encode ψ) (encode (diagSentence ψ))
+
+  -- The diagonal relation is functional.
+  have hdiag_fun :
+      ∀ m, diagonalR g m → m = encode δ := by
+    intro m hm
+    exact diagonalR_functional hm hdiagR
+    -- HOLE:
+    -- theorem diagonalR_functional :
+    --   diagonalR n m₁ → diagonalR n m₂ → m₁ = m₂
+
+  -- Therefore star (negSet T) g is equivalent to ¬ T (encode δ).
+  have hstar_eq :
+      star (negSet T) g ↔ ¬ T (encode δ) := by
+    constructor
+    · intro hs
+      rcases hs with ⟨m, hm_diag, hm_negT⟩
+      have hm : m = encode δ := hdiag_fun m hm_diag
+      simpa [negSet, hm] using hm_negT
+
+    · intro hnotT
+      exact ⟨encode δ, hdiagR, by simpa [negSet] using hnotT⟩
+
+  -- Your diagonal soundness theorem:
+  -- ψ(g) has the same truth value as the diagonal sentence δ.
+  have hdiag_sound :
+      P ↔ evalFormula empty_ctx δ :=
+    Iff.of_eq (diagonal_soundness ψ (encode ψ) empty_ctx)
+
+  have δ_closed : closed δ := diagSentence_closed hψ
+
+  -- Truth of the Gödel number of δ agrees with semantic truth of δ.
+  have hTδ :
+      T (encode δ) ↔ evalFormula empty_ctx δ := T_encode_closed δ_closed
+
+    -- HOLE:
+    -- theorem T_encode_closed :
+    --   closed δ →
+    --   T (encode δ) ↔ evalFormula empty_ctx δ
+
+  -- If `T_encode_closed` needs closedness first, move this above hTδ.
+
+  -- Combine the equivalences:
+  -- P ↔ star (¬T) g
+  --   ↔ ¬ T ⌜δ⌝
+  --   ↔ ¬ eval δ
+  --   ↔ ¬ P
+  have hP_notP :
+      P ↔ ¬ P := by
     calc
-      evalFormula empty_ctx (subst ψ (term_of_nat ⌜ψ⌝))
-        ↔ ∃ m, diagonalR ⌜ψ⌝ m → ¬ T m := h2
-      _ ↔ diagonalR ⌜ψ⌝ 0 → ¬ T 0 := by
-        constructor
-        · intro h
-          rcases h with ⟨m, h⟩
-          rw [diagonalR] at h
-          intro h1
-          intro
-          apply h
-          unfold diagonal
-          exists 100
+      P
+          ↔ star (negSet T) g := hψg
+      _   ↔ ¬ T (encode δ) := hstar_eq
+      _   ↔ ¬ evalFormula empty_ctx δ := by
+              constructor
+              · intro hnotT hδ
+                exact hnotT ((hTδ.mpr hδ))
+              · intro hnotδ hTcode
+                exact hnotδ ((hTδ.mp hTcode))
+      _   ↔ ¬ P := by
+              constructor
+              · intro hnotδ hp
+                exact hnotδ (hdiag_sound.mp hp)
+              · intro hnotP hδ
+                exact hnotP (hdiag_sound.mpr hδ)
 
-      _ ↔ ¬ evalFormula empty_ctx (subst ψ (term_of_nat ⌜ψ⌝)) := by sorry
-  grind
-
+  exact no_self_negation P hP_notP
 
 
 

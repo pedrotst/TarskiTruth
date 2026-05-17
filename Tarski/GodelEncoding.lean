@@ -82,7 +82,7 @@ def decodeDigitsL : List Nat → Option L_formula
 def decodeL : Nat → Option L_formula := fun n =>
   decodeDigitsL (digits17L n)
 
-#eval decodeL 7
+#eval decodeL 19
 
 @[simp]
 def showFormula (xs : L_formula) : String :=
@@ -104,9 +104,15 @@ def decode (fuel n : Nat) : Option Formula :=
       | _ => none
   | none => none
 
+def diagAt (n : Nat) (φ : Formula) : Formula :=
+  .forall_ 0 (.imp (.eq (.var 0) (term_of_nat n)) φ)
+
+def diagSentence (φ : Formula) : Formula :=
+  diagAt (encode φ) φ
+
 def diagonal_formula (fuel n : Nat) : Option Formula := do
   let φₙ ← decode fuel n
-  return (.forall_ 0 (.imp (.eq (.var 0) (.var n)) φₙ))
+  return diagAt n φₙ
 
 def p : Formula := (.forall_ 0 (.imp (.eq (.var 0) (.var 1)) (.eq (.var 1) (.var 2))))
 

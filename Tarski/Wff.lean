@@ -712,9 +712,109 @@ theorem parse_sound :
   ∀ {fuel l φ}, parse fuel l = some φ → unparse φ = l := by
   sorry
 
+def A : Formula := .eq .zero .zero
+def B : Formula := .le .zero .zero
+def C : Formula := .eq (.succ .zero) (.succ .zero)
+
+#eval unparse (Formula.and (.and A B) C)
+#eval unparse (Formula.and A (.and B C))
+
+theorem unparse_term_ne_nil :
+  ∀ t, unparse_term t ≠ [] := by
+  intro t
+  induction t with
+  | var v =>
+      simp [unparse_term]
+  | zero =>
+      simp [unparse_term]
+  | succ t ih =>
+      simp [unparse_term]
+  | add t u iht ihu =>
+      simp [unparse_term]
+  | mul t u iht ihu =>
+      simp [unparse_term]
+  | exp t u iht ihu =>
+      simp [unparse_term]
+
+theorem singleton_eq_append_singleton_false
+    {α : Type} {x y : α} {l : List α}
+    (hxy : x ≠ y) :
+    [x] = l ++ [y] → False := by
+  intro h
+  cases l with
+  | nil =>
+      simp at h
+      exact hxy h
+  | cons z zs =>
+      simp at h
+
+theorem append_singleton_cancel {α : Type} {xs ys : List α} {a : α} :
+    xs ++ [a] = ys ++ [a] → xs = ys := by
+  intro h
+  have hr := congrArg List.reverse h
+  simp [List.reverse_append] at hr
+  have hrr := congrArg List.reverse hr
+  simpa using hrr
+
+theorem append_S_ne_var_replicate_prime :
+    ∀ xs v, xs ++ [L.S] ≠ L.var :: List.replicate v L.prime := by
+  intro xs v h
+  induction v generalizing xs with
+  | zero =>
+      simp at h
+      cases xs with
+      | nil =>
+          simp at h
+      | cons a as =>
+          simp at h
+  | succ v ih =>
+      cases xs with
+      | nil =>
+          simp at h
+      | cons a as =>
+          simp at h
+          cases h with
+          | intro =>
+              -- after matching heads, reduce to the tail
+              sorry
+
+theorem unparse_term_injective :
+  unparse_term t1 = unparse_term t2 → t1 = t2 := by
+  induction t1 generalizing t2 with
+  | zero =>
+    intro h
+    simp at *
+    cases t2 <;> simp at h <;> try rfl
+    case zero.succ n =>
+      exfalso
+      apply singleton_eq_append_singleton_false _ h
+      grind
+  | succ n ih =>
+    intro h
+    cases t2 with
+    | var v =>
+      simp at h
+      exfalso
+      exact append_S_ne_var_replicate_prime (unparse_term n) v h
+
+
+
+    simp [unparse_term] at h ⊢
+    have hnm : unparse_term n = unparse_term m :=
+      append_singleton_cancel h
+    exact ih hnm
+
+
+
+
+
+
 theorem unparse_injective :
   unparse ψ = unparse φ → ψ = φ := by
-  sorry
+  induction ψ generalizing φ with
+  | eq p q =>
+    sorry
+  | _ => sorry
 
 
 theorem unparse_parse_closed :
@@ -735,10 +835,9 @@ theorem unparse_parse_closed :
   · simp [h] at hparse
   · grind
 
-theorem unparse_parse_id : forall φ l,
-  unparse φ = l → exists fuel, parse fuel l = some φ := by
-  intro φ l h
-  cases h
+theorem unparse_parse_id : forall φ,
+  exists fuel, parse fuel (unparse φ) = some φ := by
+  intro φ
   rcases unparse_parse_closed φ with ⟨fuel, hparse⟩
   refine ⟨fuel, ?_⟩
   have hparse' : parseFormula.parseNot fuel (unparse φ) = some (φ, []) := by
