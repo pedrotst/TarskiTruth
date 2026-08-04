@@ -55,9 +55,58 @@ theorem negSet_arith S :
       grind
 
 
+/-- The assignment `update (update empty_ctx 0 n) 1 m` is exactly the fixed
+two-variable assignment used by `ExpressesRel2`. -/
+theorem assign_two (n m : Nat) :
+    (update (update empty_ctx 0 n) 1 m)
+      = (fun x => if x = 0 then n else if x = 1 then m else 0) := by
+  funext y
+  by_cases h0 : y = 0 <;> by_cases h1 : y = 1 <;> simp [h0, h1]
+
 theorem star_arithmetic :
   IsArithmeticSet S → IsArithmeticSet (star S) := by
-  sorry
+  intro h
+  rcases h with ⟨φ, hφ0, hφ⟩
+  rcases diagonalR_arith with ⟨ψ, hψ0, hψ⟩
+  refine ⟨.exists_ 1 (.and ψ (swap01 φ)), ?_, ?_⟩
+  · -- only the variable `0` is free in `∃v₁. ψ ∧ φ[0↔1]`
+    intro x hx
+    simp only [fv, List.mem_filter, List.mem_append, decide_eq_true_eq, ne_eq] at hx
+    obtain ⟨hmem, hne⟩ := hx
+    rcases hmem with hm | hm
+    · rcases hψ0 x hm with h0 | h1
+      · exact h0
+      · exact absurd h1 hne
+    · exfalso
+      have hsw : swapNat x = 0 := hφ0 _ ((fv_swap φ x).mp hm)
+      have hx1 : x = swapNat 0 := by rw [← hsw, swapNat_invol]
+      exact hne (by simpa [swapNat] using hx1)
+  · intro n
+    rw [evalFormula_subst_update]
+    -- `swap01 φ` at `(…, 1 ↦ m)` says exactly `S m`
+    have hswap : ∀ m : Nat,
+        (evalFormula (update (update empty_ctx 0 n) 1 m) (swap01 φ) ↔ S m) := by
+      intro m
+      rw [eval_swap]
+      have hco : evalFormula ((update (update empty_ctx 0 n) 1 m) ∘ swapNat) φ
+                   ↔ evalFormula (update empty_ctx 0 m) φ := by
+        apply eval_coincide
+        intro x hx
+        have hx0 : x = 0 := hφ0 x hx
+        subst hx0
+        simp [Function.comp, swapNat]
+      rw [hco]
+      have hm := hφ m
+      rwa [evalFormula_subst_update] at hm
+    simp only [evalFormula, star]
+    constructor
+    · rintro ⟨m, hm1, hm2⟩
+      rw [assign_two n m] at hm1
+      exact ⟨m, (hψ n m).mp hm1, (hswap m).mp hm2⟩
+    · rintro ⟨m, hd, hs⟩
+      refine ⟨m, ?_, (hswap m).mpr hs⟩
+      rw [assign_two n m]
+      exact (hψ n m).mpr hd
 
 theorem no_self_negation (P : Prop) :
     ¬ (P ↔ ¬ P) := by
@@ -70,7 +119,14 @@ theorem no_self_negation (P : Prop) :
 theorem T_encode_closed :
   closed φ →
   (T (encode φ) ↔ evalFormula empty_ctx φ) := by
-  sorry
+  intro hc
+  obtain ⟨fuel₀, h0⟩ := decode_encode φ
+  constructor
+  · rintro ⟨fuel, φ', hdec, _, heval⟩
+    have heq : φ' = φ := decode_det hdec h0
+    exact heq ▸ heval
+  · intro heval
+    exact ⟨fuel₀, φ, h0, hc, heval⟩
 
 theorem diagSentence_closed :
   ExpressesSet ψ S →
