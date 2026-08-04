@@ -114,6 +114,35 @@ theorem diagonalR_arith :
 
 /-! ## `diagonalR` sends `⌜ψ⌝` to `⌜diagSentence ψ⌝` -/
 
+/-- The seven-symbol prefix of every diagonal sentence. -/
+def diagPrefix : L_formula :=
+  [L.all, L.var, L.l_par, L.l_par, L.eq, L.var, L.O]
+
+theorem encodeL_diagPrefix : encodeL diagPrefix = diagC := by decide
+
+/-- The exact string produced by diagonalising at a numeral. -/
+theorem unparse_diagAt (n : Nat) (ψ : Formula) :
+    unparse (diagAt n ψ)
+      = ((((diagPrefix ++ List.replicate n L.S) ++ [L.imp]) ++ unparse ψ)
+            ++ [L.r_par]) ++ [L.r_par] := by
+  simp [diagAt, diagPrefix, unparse_term_of_nat]
+
 theorem diagonalR_encode :
   ∀ ψ, diagonalR (encode ψ) (encode (diagSentence ψ)) := by
-  sorry
+  intro ψ
+  obtain ⟨a, l, hu, ha⟩ := unparse_head_code_ne_zero ψ
+  refine ⟨(unparse ψ).length, ⟨encodeL_lt (unparse ψ), ?_⟩, ?_⟩
+  · -- 17 ^ k ≤ 17 * ⌜ψ⌝, because the leading digit is nonzero
+    have hlen : (unparse ψ).length = l.length + 1 := by rw [hu]; simp
+    have hle : 17 ^ l.length ≤ encodeL (unparse ψ) := by
+      rw [hu]; exact le_encodeL l ha
+    rw [hlen, Nat.pow_succ]
+    show 17 ^ l.length * 17 ≤ 17 * encodeL (unparse ψ)
+    omega
+  · -- ⌜diagSentence ψ⌝ = diagF ⌜ψ⌝ k, by peeling the concatenation apart
+    show encodeL (unparse (diagSentence ψ)) = _
+    rw [diagSentence, unparse_diagAt]
+    rw [encodeL_snoc, encodeL_snoc, encodeL_append, encodeL_snoc,
+        encodeL_append, encodeL_diagPrefix, encodeL_replicate_S,
+        length_replicate_S]
+    rfl
