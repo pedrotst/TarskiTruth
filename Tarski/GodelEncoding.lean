@@ -52,7 +52,7 @@ def encodeL : L_formula → Nat :=
 
 def digits17Helper : Nat → List Nat
   | 0 => []
-  | n + 1 => digits17Helper ((n + 1)/ 17) ++ [n % 17]
+  | n + 1 => digits17Helper ((n + 1)/ 17) ++ [(n + 1) % 17]
 termination_by n => n
 decreasing_by
 simp
@@ -110,21 +110,42 @@ def diagAt (n : Nat) (φ : Formula) : Formula :=
 def diagSentence (φ : Formula) : Formula :=
   diagAt (encode φ) φ
 
-def diagonal_formula (fuel n : Nat) : Option Formula := do
-  let φₙ ← decode fuel n
-  return diagAt n φₙ
-
 def p : Formula := (.forall_ 0 (.imp (.eq (.var 0) (.var 1)) (.eq (.var 1) (.var 2))))
 
 #eval (unparse p)
 #eval List.map symbolCode (unparse p)
--- [15, 7, 9, 9, 7, 5 ] ++ unparse (.var n)  ++ [ 14 ] ++ unparse φₙ ++ [ 10, 10]
 
-def diagonal (fuel n : Nat) : Option Nat := do
-  let f ← diagonal_formula fuel n
-  return ⌜f⌝
+/-!
+### The diagonal relation
 
-def diagonalR (n φ  : Nat): Prop :=
-exists fuel, diagonal fuel n = some φ
+For a *canonical* code `n = ⌜φ⌝` with `k = (unparse φ).length`, the string
+
+    unparse (diagAt n φ)
+      = [∀,⋎,(,(,=,⋎,O] ++ replicate n S ++ [→] ++ unparse φ ++ [),)]
+
+has base-17 code
+
+    ((((C * 17^n) * 17 + 14) * 17^k + n) * 17 + 10) * 17 + 10
+
+where `C = encodeL [∀,⋎,(,(,=,⋎,O] = 372800005` (the `Sⁿ` block contributes
+nothing but a shift, because `symbolCode S = 0`).
+
+`diagonalR` is defined directly by that polynomial, with `k` pinned down as the
+base-17 digit length of `n` (`17^(k-1) ≤ n < 17^k`).  This is arithmetic
+essentially by inspection, unlike the decode-based definition which would need a
+full arithmetization of the parser.  See `PLAN.md`.
+-/
+
+/-- `C = encodeL [L.all, L.var, L.l_par, L.l_par, L.eq, L.var, L.O]`. -/
+def diagC : Nat := 372800005
+
+def diagF (n k : Nat) : Nat :=
+  ((((diagC * 17 ^ n) * 17 + 14) * 17 ^ k + n) * 17 + 10) * 17 + 10
+
+/-- `k` is the base-17 digit length of `n`. -/
+def isDigitLen17 (n k : Nat) : Prop := n < 17 ^ k ∧ 17 ^ k ≤ 17 * n
+
+def diagonalR (n m : Nat) : Prop :=
+  ∃ k, isDigitLen17 n k ∧ m = diagF n k
 
 end Godel
