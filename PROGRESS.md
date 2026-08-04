@@ -9,14 +9,19 @@ done, what the current file layout is, and the gotchas that cost time.
 |---|---|---|
 | 0 | honest baseline, root module, file split | **done** |
 | 1 | `parseFormula` fuel-mono, `parse_det`, `decode_det` | **done** |
-| 2 | round-trip `parse (unparse φ) = φ` | in progress |
+| 2 | round-trip `parse (unparse φ) = φ` | **done** |
 | 3 | base-17 encoding round-trip | **done** |
 | 4 | `diagonalR_functional`, `diagonalR_arith`, `diagonalR_encode` | **done** |
 | 5 | `eval_coincide`, `swap01`, `star_arithmetic` | **done** |
 | 6 | `T_encode_closed`, `tarski` | **done** |
 
-**One sorry left in the whole library:** `unparse_parse_id` in
-`Tarski/RoundTrip.lean`. Everything else is closed.
+**COMPLETE.** `lake clean && lake build` succeeds (14 jobs, no errors, no
+warnings). `grep -rn "sorry\|native_decide\|axiom" Tarski/` is empty, and
+
+    #print axioms tarski
+    'tarski' depends on axioms: [propext, Classical.choice, Quot.sound]
+
+i.e. the three standard Lean axioms and nothing else — no `sorryAx`.
 
 `#print axioms` confirms `star_arithmetic`, `diagonalR_arith`,
 `diagonalR_encode`, `diagonalR_functional`, `decodeL_encode` are all free of
@@ -92,6 +97,21 @@ Consequences already applied: `diagC` is now **372800005** (was 372800549), the
 6. `unparse`, `substTerm`, `subst`, `evalTerm`, `evalFormula`, `symbolCode`,
    `encodeL`, `decodeL` are all `@[simp]`. A bare `simp` unfolds a lot. `fv`,
    `fv_term`, `term_of_nat` are not.
+7. Using a hypothesis `h : parseFormula f xs = some r` under a bare `simp`
+   **fails silently**: simp unfolds the parser first and `h` becomes an unused
+   rewrite (only a "This simp argument is unused" warning). Use
+   `simp only [<one layer>, h]`, or prefer `rw [h]`.
+8. `parseFormula f xs` and `parseFormula.parseNot f xs` are **not** definitionally
+   equal (the `where` block compiles by well-founded recursion). Bridge with
+   `by simpa using e`, not `:= e`.
+9. Never put `parseTerm.parseExp` (or siblings) in a simp set when the fuel has
+   literal shape `f + 1`: simp unfolds the *recursive* call rather than applying
+   your hypothesis. State such helpers at symbolic fuel `f`, where the match
+   cannot reduce.
+10. After `by_cases`, `case <tag> => …` breaks (hygienic tag suffixes). Use
+   `cases b <;> first | <special> | <fallback>`.
+11. No Mathlib here: `by_contra`, `norm_num`, `conv_lhs`, `tauto` do **not**
+   exist. `omega`, `grind`, `decide`, `rcases`, `obtain` do.
 
 ## Log
 
@@ -101,5 +121,9 @@ Consequences already applied: `diagC` is now **372800005** (was 372800549), the
 - 2026-08-04: grammar change (see above); Phase 1 being redone against it.
 - 2026-08-04: Phase 1 redone against the new dispatch (no disjointness lemmas
   needed — roughly half the size of the pre-fix version).
+- 2026-08-04: Phase 2 closed — `unparse_parse_id` proven via a per-precedence
+  cascade (`SuccOK → ExpOK → MulOK → AddOK`, each generalised over a trailing
+  `Sᵏ` block and a level-specific safe-continuation predicate), then eight
+  head-directed formula step lemmas.  **`tarski` is fully closed.**
 - 2026-08-04: Phase 4 fully closed (`diagonalR_encode` via `unparse_diagAt` +
   `encodeL_snoc`/`encodeL_append` peeling; `encodeL diagPrefix = diagC` by `decide`).
