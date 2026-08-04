@@ -5,7 +5,18 @@ done, what the current file layout is, and the gotchas that cost time.
 
 ## Current status
 
-- **Phase 0 (honest baseline): in progress**
+| Phase | What | State |
+|---|---|---|
+| 0 | honest baseline, root module, file split | **done** |
+| 1 | `parseFormula` fuel-mono, `parse_det`, `decode_det` | **redo in progress** (grammar changed) |
+| 2 | round-trip `parse (unparse φ) = φ` | in progress |
+| 3 | base-17 encoding round-trip | **done** |
+| 4 | `diagonalR_functional`, `diagonalR_arith` | **done**; `diagonalR_encode` open |
+| 5 | `eval_coincide`, `swap01`, `star_arithmetic` | **done** |
+| 6 | `T_encode_closed`, `tarski` | **done** |
+
+Remaining sorries: `Tarski/ParseMono.lean`, `Tarski/RoundTrip.lean`,
+`Tarski/Diagonal.lean:diagonalR_encode`.
 
 ## File layout (post Phase 0)
 
@@ -23,6 +34,41 @@ done, what the current file layout is, and the gotchas that cost time.
 | `Tarski/Arithmetic.lean` | model, `IsArithmeticSet`, `star_arithmetic`, `tarski` | everything |
 | `Tarski.lean` | root module so `lake build` actually checks the library | all |
 
+## THE GRAMMAR CHANGE (2026-08-04) — read this before touching the parser
+
+PLAN.md's audit missed that **`unparse_parse_id` was false as originally stated**.
+`parseFormula.parseBase` dispatched a `(` head straight into the
+parenthesised-*formula* branch with a `do`-bind and no backtracking.  When the `(`
+was actually a *term's* paren — i.e. an atomic formula whose left-hand term is an
+`add`/`mul`/`exp` — the inner `parseImp` failed and `parseBase` returned `none`
+without ever trying `parseAtomic`.  Enumeration over 13194 formulas: 12312 failed
+(zero mis-parses; failures were always `none`).  Minimal counterexample:
+
+    parse n (unparse (Formula.eq (.add .zero .zero) .zero)) = none   for every n
+
+`star_arithmetic`'s witness contains `.le (.exp …) (.mul …)`, so the main theorem
+genuinely needed this fixed, not worked around.
+
+**Fix chosen: atomic formulas are now prefix-marked.**
+
+    unparse (.eq m n) = L.eq  :: (unparse_term m ++ unparse_term n)
+    unparse (.le m n) = L.leq :: (unparse_term m ++ unparse_term n)
+
+and `parseFormula.parseBase` now dispatches purely on the head symbol
+(`(` → parenthesised formula, `∀`/`∃` → quantifier, `=`/`≤` → atomic, else
+`none`).  Terms are self-delimiting, so `= t₁ t₂` needs no separator.
+
+Why this rather than making `parseBase` backtrack: with backtracking,
+`parseBase_succ` (fuel monotonicity) needs "`parseAtomic` and the paren-formula
+branch never both succeed", which is a genuine disjointness theorem about the two
+languages. Head-dispatch removes the ambiguity at the source, so monotonicity is
+mechanical again. Verified empirically: 1360/1360 sampled formulas round-trip.
+
+Consequences already applied: `diagC` is now **372800005** (was 372800549), the
+`wff_eq`/`wff_leq` constructors carry the prefix shape, and
+`unparse_head_code_ne_zero` got easier (heads are literally `=`/`≤`).
+`unparse_term` and `parseTerm` are **unchanged**.
+
 ## Gotchas (hard-won)
 
 1. **`lake build` used to compile nothing.** `lakefile.lean` declares
@@ -37,10 +83,14 @@ done, what the current file layout is, and the gotchas that cost time.
    `#eval` counterexamples. Deleted in Phase 0; do not resurrect.
 4. The parser accepts non-canonical strings (`[⋎,+,⋎,=,O]` parses), so
    `parse ∘ unparse = id` holds but `unparse ∘ parse = id` does NOT.
-5. `unparse`, `substTerm`, `subst`, `evalTerm`, `evalFormula`, `symbolCode`,
+5. `digits17Helper` had an off-by-one (emitted the *predecessor* mod 17). Fixed.
+6. `unparse`, `substTerm`, `subst`, `evalTerm`, `evalFormula`, `symbolCode`,
    `encodeL`, `decodeL` are all `@[simp]`. A bare `simp` unfolds a lot. `fv`,
    `fv_term`, `term_of_nat` are not.
 
 ## Log
 
 - 2026-08-03: session start. Baseline audit matches PLAN.md.
+- 2026-08-03: Phase 0 done; Phases 5+6 done (Arithmetic.lean sorry-free).
+- 2026-08-04: Phases 1, 3 done; Phase 4 done except `diagonalR_encode`.
+- 2026-08-04: grammar change (see above); Phase 1 being redone against it.

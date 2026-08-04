@@ -52,13 +52,13 @@ inductive wff : L_formula → Prop where
     forall lhs rhs : L_formula,
       wff_arith lhs →
       wff_arith rhs →
-      wff (lhs ++ L.eq :: rhs)
+      wff (L.eq :: (lhs ++ rhs))
 
 | wff_leq :
     forall lhs rhs : L_formula,
       wff_arith lhs →
       wff_arith rhs →
-      wff (lhs ++ L.leq :: rhs)
+      wff (L.leq :: (lhs ++ rhs))
 
 | wff_not :
     forall l : L_formula,

@@ -182,12 +182,9 @@ theorem unparse_term_head (t : Term) :
 theorem unparse_head_code_ne_zero (φ : Formula) :
     ∃ a l, unparse φ = a :: l ∧ symbolCode a ≠ 0 := by
   cases φ with
-  | eq m n =>
-      obtain ⟨a, l, hu, hc⟩ := unparse_term_head m
-      exact ⟨a, l ++ L.eq :: unparse_term n, by simp only [unparse, hu, List.cons_append], hc⟩
-  | le m n =>
-      obtain ⟨a, l, hu, hc⟩ := unparse_term_head m
-      exact ⟨a, l ++ L.leq :: unparse_term n, by simp only [unparse, hu, List.cons_append], hc⟩
+  -- atomic formulas are prefix-marked, so their head is `=` (5) or `≤` (6)
+  | eq m n => exact ⟨L.eq, _, rfl, by decide⟩
+  | le m n => exact ⟨L.leq, _, rfl, by decide⟩
   | not p => exact ⟨L.not, _, rfl, by decide⟩
   | and p q => exact ⟨L.l_par, _, rfl, by decide⟩
   | or p q => exact ⟨L.l_par, _, rfl, by decide⟩

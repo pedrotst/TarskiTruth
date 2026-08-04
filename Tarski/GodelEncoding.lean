@@ -121,13 +121,13 @@ def p : Formula := (.forall_ 0 (.imp (.eq (.var 0) (.var 1)) (.eq (.var 1) (.var
 For a *canonical* code `n = ⌜φ⌝` with `k = (unparse φ).length`, the string
 
     unparse (diagAt n φ)
-      = [∀,⋎,(,(,⋎,=,O] ++ replicate n S ++ [→] ++ unparse φ ++ [),)]
+      = [∀,⋎,(,(,=,⋎,O] ++ replicate n S ++ [→] ++ unparse φ ++ [),)]
 
 has base-17 code
 
     ((((C * 17^n) * 17 + 14) * 17^k + n) * 17 + 10) * 17 + 10
 
-where `C = encodeL [∀,⋎,(,(,⋎,=,O] = 372800549` (the `Sⁿ` block contributes
+where `C = encodeL [∀,⋎,(,(,=,⋎,O] = 372800005` (the `Sⁿ` block contributes
 nothing but a shift, because `symbolCode S = 0`).
 
 `diagonalR` is defined directly by that polynomial, with `k` pinned down as the
@@ -136,8 +136,8 @@ essentially by inspection, unlike the decode-based definition which would need a
 full arithmetization of the parser.  See `PLAN.md`.
 -/
 
-/-- `C = encodeL [L.all, L.var, L.l_par, L.l_par, L.var, L.eq, L.O]`. -/
-def diagC : Nat := 372800549
+/-- `C = encodeL [L.all, L.var, L.l_par, L.l_par, L.eq, L.var, L.O]`. -/
+def diagC : Nat := 372800005
 
 def diagF (n k : Nat) : Nat :=
   ((((diagC * 17 ^ n) * 17 + 14) * 17 ^ k + n) * 17 + 10) * 17 + 10
