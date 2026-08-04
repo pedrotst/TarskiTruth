@@ -8,15 +8,15 @@ done, what the current file layout is, and the gotchas that cost time.
 | Phase | What | State |
 |---|---|---|
 | 0 | honest baseline, root module, file split | **done** |
-| 1 | `parseFormula` fuel-mono, `parse_det`, `decode_det` | in progress (redo vs new grammar) |
+| 1 | `parseFormula` fuel-mono, `parse_det`, `decode_det` | **done** |
 | 2 | round-trip `parse (unparse φ) = φ` | in progress |
 | 3 | base-17 encoding round-trip | **done** |
 | 4 | `diagonalR_functional`, `diagonalR_arith`, `diagonalR_encode` | **done** |
 | 5 | `eval_coincide`, `swap01`, `star_arithmetic` | **done** |
 | 6 | `T_encode_closed`, `tarski` | **done** |
 
-**All mathematical content is closed.** The only remaining sorries are the two
-parser files, `Tarski/ParseMono.lean` (8) and `Tarski/RoundTrip.lean` (1).
+**One sorry left in the whole library:** `unparse_parse_id` in
+`Tarski/RoundTrip.lean`. Everything else is closed.
 
 `#print axioms` confirms `star_arithmetic`, `diagonalR_arith`,
 `diagonalR_encode`, `diagonalR_functional`, `decodeL_encode` are all free of
@@ -99,5 +99,7 @@ Consequences already applied: `diagC` is now **372800005** (was 372800549), the
 - 2026-08-03: Phase 0 done; Phases 5+6 done (Arithmetic.lean sorry-free).
 - 2026-08-04: Phases 1, 3 done; Phase 4 done except `diagonalR_encode`.
 - 2026-08-04: grammar change (see above); Phase 1 being redone against it.
+- 2026-08-04: Phase 1 redone against the new dispatch (no disjointness lemmas
+  needed — roughly half the size of the pre-fix version).
 - 2026-08-04: Phase 4 fully closed (`diagonalR_encode` via `unparse_diagAt` +
   `encodeL_snoc`/`encodeL_append` peeling; `encodeL diagPrefix = diagC` by `decide`).
