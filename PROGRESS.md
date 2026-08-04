@@ -43,6 +43,14 @@ i.e. the three standard Lean axioms and nothing else — no `sorryAx`.
 | `Tarski/Diagonal.lean` | Phase 4: `diagFormula`, the three `diagonalR` lemmas | EncodingLemmas, Semantics |
 | `Tarski/Arithmetic.lean` | model, `IsArithmeticSet`, `star_arithmetic`, `tarski` | everything |
 | `Tarski.lean` | root module so `lake build` actually checks the library | all |
+| `Tarski/Playground.lean` | scratch toy parser, **deliberately outside the build** | — |
+
+`Playground.lean` is a self-contained experiment (its own `Tok`/`Term`, no Tarski
+imports) modelling the same parser problem. It compiles clean and is sorry-free
+(`lake env lean Tarski/Playground.lean`), but it is intentionally NOT imported by
+`Tarski.lean`: it declares `Term` / `parseTerm` in the *root* namespace, so
+importing it would make `Term` ambiguous against `Lang.Term` for anyone doing
+`import Tarski`. It has no dependents. Re-check it by hand if you edit it.
 
 ## THE GRAMMAR CHANGE (2026-08-04) — read this before touching the parser
 
@@ -121,6 +129,8 @@ Consequences already applied: `diagC` is now **372800005** (was 372800549), the
 - 2026-08-04: grammar change (see above); Phase 1 being redone against it.
 - 2026-08-04: Phase 1 redone against the new dispatch (no disjointness lemmas
   needed — roughly half the size of the pre-fix version).
+- 2026-08-04: Phase 6 hygiene item settled — `Playground.lean` verified to
+  compile, kept out of the root module (namespace-pollution reason above).
 - 2026-08-04: Phase 2 closed — `unparse_parse_id` proven via a per-precedence
   cascade (`SuccOK → ExpOK → MulOK → AddOK`, each generalised over a trailing
   `Sᵏ` block and a level-specific safe-continuation predicate), then eight
