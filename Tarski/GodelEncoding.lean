@@ -52,7 +52,7 @@ def encodeL : L_formula → Nat :=
 
 def digits17Helper : Nat → List Nat
   | 0 => []
-  | n + 1 => digits17Helper ((n + 1)/ 17) ++ [n % 17]
+  | n + 1 => digits17Helper ((n + 1)/ 17) ++ [(n + 1) % 17]
 termination_by n => n
 decreasing_by
 simp
