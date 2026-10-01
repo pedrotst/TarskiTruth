@@ -234,8 +234,8 @@ def unparse_term : Term → L_formula
 
 @[simp]
 def unparse : Formula → L_formula
-| .eq m n        => unparse_term m ++ L.eq :: unparse_term n
-| .le m n        => unparse_term m ++ L.leq :: unparse_term n
+| .eq m n        => L.eq :: (unparse_term m ++ unparse_term n)
+| .le m n        => L.leq :: (unparse_term m ++ unparse_term n)
 | .not p         => [L.not, L.l_par] ++ unparse p ++ [L.r_par]
 | .and p q       => [L.l_par] ++ unparse p ++ [L.and] ++ unparse q ++ [L.r_par]
 | .or p q        => [L.l_par] ++ unparse p ++ [L.or] ++ unparse q ++ [L.r_par]
@@ -341,16 +341,15 @@ def parseFormula (fuel : Nat) (xs : L_formula) : Option (Formula × L_formula) :
 where
   @[simp]
   parseAtomic : Nat → L_formula → Option (Formula × L_formula)
-  | fuel, xs => do
+  | fuel, L.eq :: xs => do
       let (t1, rest1) <- parseTerm fuel xs
-      match rest1 with
-      | L.eq :: rest2 => do
-          let (t2, rest3) <- parseTerm fuel rest2
-          some (.eq t1 t2, rest3)
-      | L.leq :: rest2 => do
-          let (t2, rest3) <- parseTerm fuel rest2
-          some (.le t1 t2, rest3)
-      | _ => none
+      let (t2, rest2) <- parseTerm fuel rest1
+      some (.eq t1 t2, rest2)
+  | fuel, L.leq :: xs => do
+      let (t1, rest1) <- parseTerm fuel xs
+      let (t2, rest2) <- parseTerm fuel rest1
+      some (.le t1 t2, rest2)
+  | _, _ => none
 
   @[simp]
   parseQuantifier : Nat → L_formula → Option (Formula × L_formula)
@@ -410,13 +409,14 @@ where
       | L.r_par :: rest2 =>
           some (p, rest2)
       | _ => none
-  | fuel + 1, xs =>
-      match parseQuantifier fuel xs with
-      | some res => some res
-      | none =>
-        match parseAtomic fuel xs with
-        | some res => some res
-        | none => none
+  -- Every remaining case is decided by the head symbol alone, so the dispatch
+  -- never has to try-and-backtrack.  This is what makes fuel-monotonicity and
+  -- the round-trip theorem provable: see PROGRESS.md.
+  | fuel + 1, L.all :: xs => parseQuantifier fuel (L.all :: xs)
+  | fuel + 1, L.exi :: xs => parseQuantifier fuel (L.exi :: xs)
+  | fuel + 1, L.eq :: xs => parseAtomic fuel (L.eq :: xs)
+  | fuel + 1, L.leq :: xs => parseAtomic fuel (L.leq :: xs)
+  | _, _ => none
 
   @[simp]
   parseImp : Nat → L_formula → Option (Formula × L_formula)
